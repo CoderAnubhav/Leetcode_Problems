@@ -1,0 +1,80 @@
+name: Track Competitive Programming Solutions
+
+on:
+  push:
+    paths:
+      - '**/*.cpp'
+
+permissions:
+  contents: write
+
+jobs:
+  compile-and-track:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install openpyxl
+
+      - name: Find CPP Files
+        id: cpp_files
+        run: |
+          FILES=$(find . -name "*.cpp")
+
+          echo "files<<EOF" >> $GITHUB_OUTPUT
+          echo "$FILES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Show CPP Files
+        run: |
+          echo "${{ steps.cpp_files.outputs.files }}"
+
+      - name: Compile CPP Files
+        run: |
+          mkdir -p build
+
+          while read file
+          do
+            [ -z "$file" ] && continue
+
+            echo "Compiling $file"
+
+            g++ -std=c++17 -O2 -Wall "$file" -o build/temp.out
+
+          done <<< "${{ steps.cpp_files.outputs.files }}"
+
+      - name: Update Excel Tracker
+        env:
+          PUSH_DATE: ${{ github.event.head_commit.timestamp }}
+        run: |
+          while read file
+          do
+            [ -z "$file" ] && continue
+
+            python tracker.py "$file"
+
+          done <<< "${{ steps.cpp_files.outputs.files }}"
+
+      - name: Commit Excel Changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add problems.xlsx
+
+          if git diff --cached --quiet; then
+            echo "No changes detected."
+          else
+            git commit -m "Update problem tracker"
+            git push
+          fi
